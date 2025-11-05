@@ -104,6 +104,12 @@ export class WwydCommand implements CommandBuilder {
 			.addSingleSubCom("random", ExpectedType.LITERAL, "Get random wwyd")
 			.back()
 			.addSingleSubCom(
+				"accuracy",
+				ExpectedType.LITERAL,
+				"Show WWYD accuracy leaderboard (min 5 attempts)"
+			)
+			.back()
+			.addSingleSubCom(
 				"leaderboard",
 				ExpectedType.LITERAL,
 				"Show WWYD leaderboard for this server"
@@ -136,7 +142,7 @@ export class WwydCommand implements CommandBuilder {
 
 		if (args.length === 0) {
 			eb.addContent(
-				`Available commands are ${["random", "enable", "disable", "lb"]
+				`Available commands are ${["random", "accuracy", "enable", "disable", "lb"]
 					.map((cmd) => inlineCode(cmd))
 					.join(", ")}.`
 			);
@@ -220,11 +226,10 @@ export class WwydCommand implements CommandBuilder {
 				return a.attempts - b.attempts; // lower attempts first
 			});
 
-			const top = users.slice(0, topN).filter((u) => u.accuracy >= 0.5);
+			const top = users//.slice(0, topN).filter((u) => u.accuracy >= 0.5);
 
 			if (top.length === 0) {
 				eb.addContent("No leaderboard data yet. Solve some daily WWYDs!");
-				eb.setFooter({ text: "Only users with at least 50% accuracy are shown." });
 				event.reply({ embeds: [eb] });
 				return;
 			}
@@ -252,7 +257,66 @@ export class WwydCommand implements CommandBuilder {
 
 			eb.setTitle("WWYD Leaderboard");
 			eb.addContent(lines.join("\n"));
-			eb.setFooter({ text: "Only users with at least 50% accuracy are shown." });
+			event.reply({ embeds: [eb] });
+		} else if (args[0] === "accuracy" || args[0] === "acc") {
+			if (!event.guildId) {
+				eb.addContent("This command can only be used in a server.");
+				event.reply({ embeds: [eb] });
+				return;
+			}
+
+			const lb = getLeaderboard(event.guildId);
+			const users = Object.keys(lb).map((user) => {
+				const u = lb[user] || { attempts: 0, correct: 0 };
+				const attempts = u.attempts ?? 0;
+				const correct = u.correct ?? 0;
+				const accuracy = attempts > 0 ? correct / attempts : 0;
+				return { uid: user, attempts, correct, accuracy };
+			});
+
+			// Only show users with at least 5 attempts
+			const filtered = users.filter((u) => u.attempts >= 5);
+			if (filtered.length === 0) {
+				eb.addContent("No users with at least 5 attempts yet. Keep solving daily WWYDs!");
+				eb.setFooter({ text: "Only users with at least 5 attempts are shown." });
+				event.reply({ embeds: [eb] });
+				return;
+			}
+
+			// Sort by accuracy desc, then correct desc, then attempts desc (as tertiary)
+			filtered.sort((a, b) => {
+				if (b.accuracy !== a.accuracy) return b.accuracy - a.accuracy;
+				if (b.correct !== a.correct) return b.correct - a.correct;
+				return b.attempts - a.attempts;
+			});
+
+			const EPS = 1e-9;
+			const lines: string[] = [];
+			let rank = 1;
+			let shownRank = 1;
+			for (let i = 0; i < filtered.length; i++) {
+				if (i > 0) {
+					const p = filtered[i - 1];
+					const c = filtered[i];
+					const accTie = Math.abs(p.accuracy - c.accuracy) < EPS;
+					const corrTie = p.correct === c.correct;
+					if (!(accTie && corrTie)) {
+						shownRank = rank;
+					}
+				}
+				const row = filtered[i];
+				const name = `<@${row.uid}>`;
+				lines.push(
+					`${inlineCode(String(shownRank))} ${name} — ${(row.accuracy * 100).toFixed(
+						1
+					)}% • ${row.correct}/${row.attempts} correct`
+				);
+				rank++;
+			}
+
+			eb.setTitle("WWYD Accuracy Leaderboard");
+			eb.addContent(lines.join("\n"));
+			eb.setFooter({ text: "Only users with at least 5 attempts are shown." });
 			event.reply({ embeds: [eb] });
 		}
 	}
