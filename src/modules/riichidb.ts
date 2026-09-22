@@ -15,6 +15,7 @@ import BotProperties from "../../bot_properties.json"
 import { BotModule } from "../data/bot_module";
 import { BotRegistrar } from "../data/bot_registrar";
 import { BotConfig } from "../data/bot_config";
+import { hasWriteAccess } from "../data/write_access";
 import { calculateLifetimeGameDeltas, LifetimePlayerState } from "./riichidb/lifetime_progression";
 import { mkdirSync, writeFileSync } from "fs";
 
@@ -66,7 +67,7 @@ export class RDBModule implements BotModule {
     }
 
     async messageCtxHandler(conf: BotConfig, interaction: MessageContextMenuCommandInteraction) {
-        if (!conf.writeAccess.includes(interaction.user.id)) return;
+        if (!hasWriteAccess(conf, interaction.user.id, interaction.member)) return;
             let str = interaction.targetMessage.content;
             
             //make sure the message mentions 4 users
@@ -135,7 +136,7 @@ export class RDBModule implements BotModule {
     
     
     async runCommand(conf: BotConfig, event: Message<boolean>, args: string[]): Promise<void> {
-        const is_admin = conf.writeAccess.includes(event.author.id);
+        const is_admin = hasWriteAccess(conf, event.author.id, event.member);
 
         if (args[0] === "me") {
             await this.replyWithPlayerProfile(event, event.author, args.slice(1));
