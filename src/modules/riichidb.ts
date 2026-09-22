@@ -67,7 +67,6 @@ export class RDBModule implements BotModule {
     }
 
     async messageCtxHandler(conf: BotConfig, interaction: MessageContextMenuCommandInteraction) {
-        if (!hasWriteAccess(conf, interaction.user.id, interaction.member)) return;
             let str = interaction.targetMessage.content;
             
             //make sure the message mentions 4 users
