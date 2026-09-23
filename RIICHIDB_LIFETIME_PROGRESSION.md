@@ -54,6 +54,107 @@ Shortcut profile/compare commands:
 
 Lifetime progression currently counts regular games and excludes league seasons whose `season_id` ends with `_L`.
 
+## Proposed East-Only Score Insertion
+
+Status: proposed for confirmation; not implemented yet.
+
+Add a third message context-menu action:
+
+```text
+Insert Scores (East-Only)
+```
+
+An East-only entry is a regular-season game, not a league game. It counts toward regular RiichiDB statistics and lifetime progression. The game must be stored explicitly as East-only so lifetime progression can distinguish it whenever historical ranks are recomputed. Existing games default to full-length games.
+
+Stored adjusted scores keep the normal club uma:
+
+```text
+1st: +15
+2nd:  +5
+3rd:  -5
+4th: -15
+```
+
+Ties split these uma slots in the same way as existing score insertion. The raw score movement, season target, and oka calculations also remain unchanged.
+
+For lifetime progression, only the additional lifetime layers are halved:
+
+```text
+Full-game lifetime placement: +30 / +10 / -10 / -30
+East-only lifetime placement:  +15 /  +5 /  -5 / -15
+
+Full-game difficulty multiplier: 0.5
+East-only difficulty multiplier:  0.25
+
+Full-game participation bonus: Novice +10, Adept +5, Expert+ 0
+East-only participation bonus: Novice  +5, Adept +2.5, Expert+ 0
+```
+
+The East-only lifetime formula is therefore:
+
+```text
+scoreMovement = (rawScore - seasonTarget + seasonOka) / 1000
+difficultyBonus = 0.25 * sum(opponentRank - playerRank)
+rawDelta = scoreMovement + eastOnlyLifetimeUma + difficultyBonus + eastOnlyParticipationBonus
+delta = ceil(rawDelta)
+```
+
+Only one ceiling operation is applied, after all fractional components are added. Raw score movement is not halved because the submitted final scores already represent the actual East-only result.
+
+### East-Only Worked Example
+
+Assume an East-only game has no oka, a `25,000` target, and these results:
+
+```text
+Player   Rank     Raw score   Place
+A        Novice      40,000   1st
+B        Expert      30,000   2nd
+C        Expert      20,000   3rd
+D        Expert      10,000   4th
+```
+
+Player A's stored adjusted score uses the normal `+15` first-place uma:
+
+```text
+score movement = (40,000 - 25,000) / 1000 = +15
+stored adjusted score = +15 + +15 = +30
+```
+
+For lifetime progression, A is a Novice facing three Experts:
+
+```text
+rank difference sum = (3 - 1) + (3 - 1) + (3 - 1) = 6
+East-only difficulty bonus = 6 * 0.25 = +1.5
+
+score movement              +15
+East-only lifetime uma      +15
+East-only difficulty bonus  +1.5
+East-only participation     +5
+raw lifetime delta          +36.5
+stored lifetime delta       ceil(36.5) = +37
+```
+
+For comparison, the same result treated as a full-length game would give A:
+
+```text
++15 score movement +30 lifetime uma +3 difficulty +10 participation = +58
+```
+
+The remaining East-only lifetime deltas are:
+
+```text
+B (Expert, 2nd):  +5 +5 -0.5 +0 =  +9.5 -> +10
+C (Expert, 3rd):  -5 -5 -0.5 +0 = -10.5 -> -10
+D (Expert, 4th): -15 -15 -0.5 +0 = -30.5 -> -30
+```
+
+Proposed persistence:
+
+- Add a game-length field to `GameTable`, with values such as `full` and `east`.
+- Default existing rows to `full` during migration.
+- Mark games submitted through `Insert Scores (East-Only)` as `east`.
+- Keep the existing `Insert Scores` and `Insert League Scores` behavior unchanged.
+
 ## Current Implemented Formula
 
 The current implementation is a Mahjong Soul-style rank-local progression system.
