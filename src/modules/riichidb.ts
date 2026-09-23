@@ -48,6 +48,11 @@ interface LeagueWeekWindow {
     end: Dayjs;
 }
 
+interface PromotionAnnouncement {
+    playerId: string;
+    rankName: string;
+}
+
 export class RDBModule implements BotModule {
 
     init(ctx: BotRegistrar): void | Promise<void> {
@@ -114,22 +119,32 @@ export class RDBModule implements BotModule {
             } else {
                 await interaction.targetMessage.react("🏆")
             }
-            const embed = isLeagueSubmission
-                ? this.createLeagueScoreSubmitEmbed(
+            if (isLeagueSubmission) {
+                const embed = this.createLeagueScoreSubmitEmbed(
                     cur_season,
                     gameinfo,
                     beforeLeagueStandings,
                     await this.getSeasonAdjustedStandingMap(cur_season.season_id),
                     interaction.client,
-                )
-                : this.createRegularScoreSubmitEmbed(
+                );
+                await interaction.reply({ embeds: [embed] });
+                return;
+            }
+
+            const result = this.createRegularScoreSubmitEmbed(
                     cur_season,
                     gameinfo,
                     beforeLifetime,
                     await this.getLifetimeStateMap(playerIds),
                     interaction.client,
                 );
-            await interaction.reply({ embeds: [embed] });
+            await interaction.reply({ embeds: [result.embed] });
+            for (const promotion of result.promotions) {
+                await interaction.followUp({
+                    content: `🎉 <@${promotion.playerId}> promoted to **${promotion.rankName}**!`,
+                    allowedMentions: { users: [promotion.playerId] },
+                });
+            }
         
     }
     
@@ -286,9 +301,9 @@ export class RDBModule implements BotModule {
         beforeLifetime: Map<string, LifetimePlayerState>,
         afterLifetime: Map<string, LifetimePlayerState>,
         client: Client,
-    ): EmbedManager {
+    ): { embed: EmbedManager; promotions: PromotionAnnouncement[] } {
         const eb = new EmbedManager(`Recorded Game (${season.display_name})`, client);
-        const promotions: string[] = [];
+        const promotions: PromotionAnnouncement[] = [];
         const lifetimeDeltas = calculateLifetimeGameDeltas(gameinfo.map(player => ({
             game_id: "",
             player_id: player.id,
@@ -304,17 +319,14 @@ export class RDBModule implements BotModule {
             const delta = lifetimeDeltas.get(player.id) ?? 0;
 
             if (after && after.rank > (before?.rank ?? 1)) {
-                promotions.push(`<@${player.id}> -> ${after.rank_name}`);
+                promotions.push({ playerId: player.id, rankName: after.rank_name });
             }
 
-            return `${player.placement} <@${player.id}> ${this.formatSignedFixed(player.scoreAdj / 1000, 1)} | ${this.formatSignedFixed(delta, 0)} -> ${after ? this.formatLifetimeRankProgressCompact(after) : "Unranked"}`;
+            return `${player.placement} <@${player.id}> | ${this.formatSignedFixed(delta, 0)} -> ${after ? this.formatLifetimeRankProgressCompact(after) : "Unranked"}`;
         });
 
         eb.addContent(lines.join("\n"));
-        if (promotions.length > 0) {
-            eb.addFields({ name: "Promotions", value: promotions.join("\n"), inline: false });
-        }
-        return eb;
+        return { embed: eb, promotions };
     }
 
     private createLeagueScoreSubmitEmbed(

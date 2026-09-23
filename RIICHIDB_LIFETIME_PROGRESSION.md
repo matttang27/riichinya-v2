@@ -56,7 +56,7 @@ Lifetime progression currently counts regular games and excludes league seasons 
 
 ## Proposed East-Only Score Insertion
 
-Status: proposed for confirmation; not implemented yet.
+Status: confirmed; not implemented yet.
 
 Add a third message context-menu action:
 
